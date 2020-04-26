@@ -1,0 +1,8 @@
+{
+    "appService.zipIgnorePattern": [
+        "node_modules{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/c7d459c6-46dc-4265-841c-6f1d6d6db1eb/resourceGroups/ihedge-iams-prod-rg/providers/Microsoft.Web/sites/ihedge-iams-prod-web",
+    "appService.deploySubpath": ""
+}
