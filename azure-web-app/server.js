@@ -7,7 +7,7 @@ const uuidv1 = require('uuid/v1');
 
 var port = process.env.PORT || 8080;
 var fileUploadInProgress = false;
-
+var validToken = "";
 
 async function beginFileUpload(request, response, callback) {
   fileUploadInProgress = true;
@@ -47,7 +47,7 @@ function getPayloadData(request, response, callback) {
 async function uploadBlobAsync(localFilePath) {    
     // Create a unique name for the blob
     var AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-    AZURE_STORAGE_CONNECTION_STRING=process.env["az-conn-string"];
+    AZURE_STORAGE_CONNECTION_STRING=process.env["AZURE_STORAGE_CONNECTION_STRING"];
     console.log("AZURE_STORAGE_CONNECTION_STRING="+AZURE_STORAGE_CONNECTION_STRING);
     // Create the BlobServiceClient object which will be used to create a container client
     const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
@@ -139,34 +139,45 @@ function parseHtml(html) {
     });
   }
 
-function writeJson(response) {
-    if(squidActiveStatus.trim().toLocaleLowerCase() == "inactive" || squidActiveStatus.trim().toLocaleLowerCase() == "deactivating") {
-        response.writeHead(503, { 'Content-Type': 'application/json' });
-        var jsonStatus = JSON.stringify({ status : "Unavailable"});
-        response.end(jsonStatus);
-    }
-    else {
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        var jsonStatus = JSON.stringify({ status : "OK"});
-        response.end(jsonStatus);
-    }  
+function writeJson(response, statusCode, responseData, bearerToken) {
+  if(bearerToken)
+    response.writeHead(statusCode, { 'Content-Type': 'application/json', "Authorization": bearerToken });
+  else
+    response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  
+  var jsonResponse = JSON.stringify(responseData);
+  response.write(jsonResponse);
+  response.end();
 }
 
 function uploadComplete(response, localFilePath) {
   writeHtmlPage(response, './static/html/index.html');
 }
 
-var validToken = "";
 function login(response, payload) {
   console.log("trying to log in...");
   var passwords = fs.readFileSync("local/passwords");
   if(payload.password == passwords.toString()) {
       console.log("password accepted.");
       validToken = uuidv1();
-      writeHtmlPage(response, './static/html/index.html', validToken);
+      writeJson(response, 200, { "Message" : "Login successful" }, "Bearer " + validToken);
       return;
   }
-  writeHtmlPage(response, './static/html/login.html');
+  console.log("login failed.");
+  writeJson(response, 401, { "Message": "Invalid login or password" });
+}
+
+function getCookieValue(cookie, key) {
+  if(cookie == undefined || cookie.length == 0)
+    return null;
+  const COOKIE_AUTH_KEY="Authorization=";
+  var tokenStart = cookie.indexOf(COOKIE_AUTH_KEY);
+  var token = cookie.substring(tokenStart+COOKIE_AUTH_KEY.length);
+  var tokenEnd = token.indexOf(";");
+  if(tokenEnd > 0)
+    token = token.substring(0, tokenEnd);
+  token = token.replace("Bearer", "").trim();
+  return token;
 }
 
 http.createServer(async function (request, response) {
@@ -180,12 +191,16 @@ http.createServer(async function (request, response) {
     else {
       // Authorized section
       var token = request.headers.authorization;
+      if(token == undefined)
+        token = getCookieValue(request.headers.cookie, "Authorization");
       if(token == undefined) {
+        console.log("No token found in headers!");
         writeHtmlPage(response, './static/html/login.html');
         return;
       }
       else {
         if(token != validToken) {
+          console.log("Token invalid or expired!");
           writeHtmlPage(response, './static/html/login.html');
           return;
         }
@@ -193,7 +208,8 @@ http.createServer(async function (request, response) {
       if(request.url.startsWith("/upload")) {
         await beginFileUpload(request, response, uploadComplete);
       }
-      else writeHtmlPage(response, './static/html/index.html');      
+      else if(request.url.startsWith("/index")) writeHtmlPage(response, './static/html/index.html');
+      else writeHtmlPage(response, './static/html/index.html');
     }
   }
     
