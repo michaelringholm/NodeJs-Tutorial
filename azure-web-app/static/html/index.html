@@ -2,15 +2,39 @@
 <html>
     <head>
         <link rel="stylesheet" type="text/css" href="css/index.css">
-        <script src="https://code.jquery.com/jquery-3.5.0.min.js" integrity="sha256-xNzN2a4ltkB44Mc/Jz3pT4iU1cmeR0FkXs4pru/JxaQ=" crossorigin="anonymous"></script>
+        <link rel="stylesheet" type="text/css" href="css/dropzone.min.css">
+        <link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+        <script src="https://code.jquery.com/jquery-3.5.0.min.js" integrity="sha256-xNzN2a4ltkB44Mc/Jz3pT4iU1cmeR0FkXs4pru/JxaQ=" crossorigin="anonymous"></script>        
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+        <script src="js/dropzone.min.js"></script>
         <script src="js/upload.js"></script>
     </head>
     <body>
         <h1>iHedge Backup File Uploader</h1>
-        <form method="POST">
-            <input type="file" id="inputFile">
-        </form>
+        <!--<form method="POST" action="#">
+            <input type="file" id="inputFile" multiple>
+        </form>                
         <div id="uploadStatusBlock" style="display:none;"><img src="https://map.stjohns.ca/mapcentre/assests/images/loading.gif" alt="progress bar"></div>
-        <div id="uploadStatus" style="margin-top: 1rem; font-size:12pt; font-weight:bold;"></div>
+        <div id="uploadStatus" style="margin-top: 1rem; font-size:12pt; font-weight:bold;"></div>-->
+        <div id="fileUploadDropZone" action="ddd" class="dropzone"></div>
+
+        <div style="margin-top: 6rem;">Files uploaded to Azure Cloud</div>
+        <div id="blobListWidget" class="container-fluid" style="width: 100%; min-height: 10rem; background-color: #eeefff">
+            <div id="blobListHeader" class="row">
+                <div class="col-6">Blob Name</div>
+                <div class="col-4">Created On</div>
+                <div class="col-2">Content Length</div>
+            </div>
+            <div id="blobList">
+
+            </div>
+        </div>
+
+        <!-- Templates -->
+        <div id="blobItemTemplate" class="template row">
+            <div class="name col-6"></div>
+            <div class="createdDate col-4"></div>
+            <div class="contentLength col-2"></div>
+        </div>
     </body>
 </html>

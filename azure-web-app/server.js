@@ -77,6 +77,31 @@ async function uploadBlobAsync(localFilePath) {
     fileUploadInProgress = false;
 }
 
+async function getBlobListAsync() {    
+  // Create a unique name for the blob
+  var AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  AZURE_STORAGE_CONNECTION_STRING=process.env["AZURE_STORAGE_CONNECTION_STRING"];
+  console.log("AZURE_STORAGE_CONNECTION_STRING="+AZURE_STORAGE_CONNECTION_STRING);
+  // Create the BlobServiceClient object which will be used to create a container client
+  const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+
+  // Create a unique name for the container
+  //const containerName = 'quickstart' + uuidv1();
+  var containerName = "backup";
+
+  console.log('\nCreating container...');
+  console.log('\t', containerName);
+
+  var containerClient = blobServiceClient.getContainerClient(containerName);
+  var blobList = new Array();
+  for await (const blob of containerClient.listBlobsFlat()) {
+    console.log("Blob ${i++}: ${blob.name}");
+    blobList.push(blob);
+  }
+  console.log('\nBlob List:\n\t', blobList);
+  return blobList;
+}
+
 function setHtmlValue(html, tag, value) {
     if(value == undefined) return html;
     html = html.toString().replace(new RegExp(tag, 'g'), value);
@@ -94,9 +119,9 @@ function parseHtml(html) {
     return parsedHtml;
   }
   
-  function writeCss(response) {
+  function writeCss(response, cssPath) {
     response.writeHead(200, { 'Content-Type': 'text/css' });
-    fs.readFile('./static/css/index.css', null, function (error, css) {
+    fs.readFile('./static/' + cssPath, null, function (error, css) {
       if (error) {
         response.writeHead(404);
         response.write('file not found');
@@ -182,14 +207,13 @@ function getCookieValue(cookie, key) {
 
 http.createServer(async function (request, response) {
     console.log("function triggered by URL " + request.url);
-    if(request.url.startsWith("/css/index.css")) writeCss(response);
-    else if(request.url.startsWith("/js/upload.js")) writeJs(response, request.url);
-    else if(request.url.startsWith("/js/login.js")) writeJs(response, request.url);
+    if(request.url.startsWith("/css/")) writeCss(response, request.url);
+    else if(request.url.startsWith("/js/")) writeJs(response, request.url);
     else if(request.url.startsWith("/login")) {
       getPayloadData(request, response, login);      
     }
     else {
-      // Authorized section
+      // ***** Authorized section ******
       var token = request.headers.authorization;
       if(token == undefined)
         token = getCookieValue(request.headers.cookie, "Authorization");
@@ -207,6 +231,10 @@ http.createServer(async function (request, response) {
         // When authorized check the wanted URL    
       if(request.url.startsWith("/upload")) {
         await beginFileUpload(request, response, uploadComplete);
+      }
+      else if(request.url.startsWith("/list-files")) {
+        var blobList = await getBlobListAsync();
+        writeJson(response, 200, { "message" : "Here is the blob list...", "blobList": blobList }, "Bearer " + validToken);
       }
       else if(request.url.startsWith("/index")) writeHtmlPage(response, './static/html/index.html');
       else writeHtmlPage(response, './static/html/index.html');
@@ -228,4 +256,5 @@ http.createServer(async function (request, response) {
 
 app.listen(port);*/
 
-console.log('Your application is listening on port '+port);
+console.log('Your application is listening on port ' + port);
+console.log('http://localhost:' + port);
