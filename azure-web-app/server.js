@@ -4,6 +4,7 @@ var http = require('http');
 var fs = require('fs');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const uuidv1 = require('uuid/v1');
+const formidable = require('formidable')
 
 var port = process.env.PORT || 8080;
 var fileUploadInProgress = false;
@@ -11,8 +12,21 @@ var validToken = "";
 
 async function beginFileUpload(request, response, callback) {
   fileUploadInProgress = true;
+
+  var form = new formidable.IncomingForm();
+  form.parse(request, async function(err, fields, files) {
+    console.log("parsing form...");
+    for(var fileIndex in files) {
+      var file = files[fileIndex];
+      await uploadBlobAsync(file.path, file.name);
+    }
+    if(callback) callback(response, file.path);
+  });
+
+
   //const FORM_URLENCODED = 'application/x-www-form-urlencoded';
-  const FORM_MULTIPART = 'multipart';
+  
+  /*const FORM_MULTIPART = 'multipart';
   if(request.headers['content-type'].startsWith(FORM_MULTIPART)) {
       var localFilePath = "temp/" + uuidv1();
       //var stream = fs.createWriteStream(localFilePath);
@@ -22,12 +36,12 @@ async function beginFileUpload(request, response, callback) {
           //body += chunk.toString();
       });
       request.on('end', async() => {          
-          await uploadBlobAsync(localFilePath);
+          //await uploadBlobAsync(localFilePath);
           console.log("file written " + localFilePath);
           if(callback) callback(response, localFilePath);
       });
   }
-  else if(callback) callback();  
+  else if(callback) callback();  */
 }
 
 function getPayloadData(request, response, callback) {  
@@ -44,7 +58,7 @@ function getPayloadData(request, response, callback) {
   }
 }
 
-async function uploadBlobAsync(localFilePath) {    
+async function uploadBlobAsync(localFilePath, originalFileName) {    
     // Create a unique name for the blob
     var AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
     AZURE_STORAGE_CONNECTION_STRING=process.env["AZURE_STORAGE_CONNECTION_STRING"];
@@ -52,18 +66,14 @@ async function uploadBlobAsync(localFilePath) {
     // Create the BlobServiceClient object which will be used to create a container client
     const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
 
-    // Create a unique name for the container
     //const containerName = 'quickstart' + uuidv1();
     var containerName = "backup";
 
     console.log('\nCreating container...');
     console.log('\t', containerName);
 
-    // Get a reference to a container
     var containerClient = blobServiceClient.getContainerClient(containerName);
-    var blobName = uuidv1();
-
-    // Get a block blob client
+    var blobName = originalFileName; //uuidv1();
     var blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
     console.log('\nUploading to Azure storage as blob:\n\t', blobName);
@@ -176,7 +186,8 @@ function writeJson(response, statusCode, responseData, bearerToken) {
 }
 
 function uploadComplete(response, localFilePath) {
-  writeHtmlPage(response, './static/html/index.html');
+  //writeHtmlPage(response, './static/html/index.html');
+  writeJson(response, 200, { "message" : "Upload completed." }, "Bearer " + validToken);
 }
 
 function login(response, payload) {

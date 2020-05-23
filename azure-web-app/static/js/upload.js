@@ -15,6 +15,11 @@ $(function() {
             });
         }
   });*/
+
+
+  $("#fileUploadDropZone").get(0).dropzone.on("complete", function(file, xhr, formData) {
+    azureBlobStoreClient.listFiles();
+  });
 });
 
 function AzureBlobStoreClient() {
@@ -31,6 +36,7 @@ function AzureBlobStoreClient() {
         var contentType = xhr.getResponseHeader("Content-Type");
         var authorization = xhr.getResponseHeader("Authorization");
         document.cookie = "Authorization=" + authorization + ";" 
+        $("#blobList").empty();
         for(var blobListIndex in response.blobList) {
           var blobItem = response.blobList[blobListIndex];
           var newBlobItem = $("#blobItemTemplate").clone();
