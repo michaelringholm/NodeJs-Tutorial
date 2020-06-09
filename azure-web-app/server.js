@@ -3,8 +3,10 @@
 var http = require('http');
 var fs = require('fs');
 const { BlobServiceClient } = require('@azure/storage-blob');
-const uuidv1 = require('uuid/v1');
+const uuidv1 = require('uuid');
 const formidable = require('formidable')
+const authenticator = require('authenticator')
+const QRCode = require(`qrcode`)
 
 var port = process.env.PORT || 8080;
 var fileUploadInProgress = false;
@@ -14,6 +16,7 @@ async function beginFileUpload(request, response, callback) {
   fileUploadInProgress = true;
 
   var form = new formidable.IncomingForm();
+  form.maxFileSize = 8*1024*1024*1024;
   form.parse(request, async function(err, fields, files) {
     console.log("parsing form...");
     for(var fileIndex in files) {
@@ -118,8 +121,12 @@ function setHtmlValue(html, tag, value) {
     return html;
 }
 
-function parseHtml(html) {
+function parseHtml(html, model) {
     var parsedHtml = html;
+    for(var key in model) {
+      console.log("key="+key);
+      console.log("value=" +model[key]);
+    }
     //parsedHtml = setHtmlValue(parsedHtml, "{fileUploadInProgress}", fileUploadInProgress);
     /*parsedHtml = setHtmlValue(parsedHtml, "{squidSubStatus}", squidSubStatus);
     parsedHtml = setHtmlValue(parsedHtml, "{squidStatus}", squidStatus);
@@ -157,7 +164,7 @@ function parseHtml(html) {
     });
   }  
   
-  function writeHtmlPage(response, pagePath, bearerToken) {
+  function writeHtmlPage(response, pagePath, model, bearerToken) {
     if(bearerToken)
       response.writeHead(200, { 'Content-Type': 'text/html', "Authorization": bearerToken });
     else
@@ -168,7 +175,7 @@ function parseHtml(html) {
         response.writeHead(404);
         response.write('file not found');
       } else {
-        response.write(parseHtml(html));
+        response.write(parseHtml(html, model));
       }
       response.end();
     });
@@ -216,8 +223,15 @@ function getCookieValue(cookie, key) {
   return token;
 }
 
-http.createServer(async function (request, response) {
+var server = http.createServer(async function (request, response) {
     console.log("function triggered by URL " + request.url);
+    var authenticatorKey = authenticator.generateKey();
+    var qrCodeUri = authenticator.generateTotpUri(authenticatorKey, "iHedge Blob Uploader", "iHedge", "SHA1", 6, 30);
+    QRCode.toDataURL(qrCodeUri, function (error, image) { 
+      //console.log(image);
+    });
+    var model = {};
+
     if(request.url.startsWith("/css/")) writeCss(response, request.url);
     else if(request.url.startsWith("/js/")) writeJs(response, request.url);
     else if(request.url.startsWith("/login")) {
@@ -230,13 +244,13 @@ http.createServer(async function (request, response) {
         token = getCookieValue(request.headers.cookie, "Authorization");
       if(token == undefined) {
         console.log("No token found in headers!");
-        writeHtmlPage(response, './static/html/login.html');
+        writeHtmlPage(response, './static/html/login.html', model);
         return;
       }
       else {
         if(token != validToken) {
           console.log("Token invalid or expired!");
-          writeHtmlPage(response, './static/html/login.html');
+          writeHtmlPage(response, './static/html/login.html', model);
           return;
         }
         // When authorized check the wanted URL    
@@ -259,7 +273,10 @@ http.createServer(async function (request, response) {
     res.write("</form>");
     res.end('iHedge Blob Uploader');*/
     
-}).listen(port);
+});
+
+server.timeout = 600*1000;
+server.listen(port);
 
 /*app.get('/', function(request, response){
     response.sendFile(process.cwd()+'/static/index.html');

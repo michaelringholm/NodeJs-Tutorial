@@ -16,7 +16,8 @@ $(function() {
         }
   });*/
 
-
+  $("#fileUploadDropZone").get(0).dropzone.options.maxFilesize = 8*1014;
+  $("#fileUploadDropZone").get(0).dropzone.options.timeout = 600 * 1000;
   $("#fileUploadDropZone").get(0).dropzone.on("complete", function(file, xhr, formData) {
     azureBlobStoreClient.listFiles();
   });

@@ -1,13 +1,28 @@
 <!doctype html>
 <html>
     <head>
+        <title>iHedge Blob Uploader - Login</title>
+        <link rel="stylesheet" type="text/css" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
         <link rel="stylesheet" type="text/css" href="css/index.css">
         <script src="https://code.jquery.com/jquery-3.5.0.min.js" integrity="sha256-xNzN2a4ltkB44Mc/Jz3pT4iU1cmeR0FkXs4pru/JxaQ=" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
         <script src="js/login.js"></script>
     </head>
     <body>
-        <h1>iHedge Backup File Uploader v1.1 - Login</h1>
-        Password: <input type="password" id="password">
-        <input id="btnLogin" type="button" value="login">
+        <div class="container-fluid">
+            <h1>iHedge Backup File Uploader v1.1 - Login</h1>
+            <div class="row">
+            Password: <input type="password" id="password">
+            </div>
+            <div class="row">
+                MFA Code:<input id="mfaCode" type="text">
+            </div>
+            <div class="row">
+                <input id="btnLogin" type="button" value="login">
+            </div>
+            <div class="row">
+                <img src="data:image/png;base64,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" alt="qrCode">
+            </div>
+        </div>
     </body>
 </html>
