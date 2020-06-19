@@ -63,5 +63,6 @@ typings/
 # package-lock-json
 package-lock.json
 temp
+tmp
 local
 launch.json

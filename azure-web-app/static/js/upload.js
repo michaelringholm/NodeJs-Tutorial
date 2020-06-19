@@ -7,8 +7,7 @@ $(function() {
   $("#fileUploadDropZone").get(0).dropzone.options.timeout = 600 * 1000; // 10 minutes
   $("#fileUploadDropZone").get(0).dropzone.on("complete", function(file, xhr, formData) {
     azureBlobStoreClient.listFiles();
-  });
-  $(".blobItem").click(azureBlobStoreClient.downloadFile);
+  });  
 });
 
 function AzureBlobStoreClient() {
@@ -36,6 +35,7 @@ function AzureBlobStoreClient() {
           $(newBlobItem).find(".contentLength").html(blobItem.properties.contentLength);
           $("#blobList").append(newBlobItem);
         }
+        $(".blobItem").click(_this.downloadFile);
         console.log("Done listing files in Azure blob store.");
       },
       error: function(xhr, status, reason) {
@@ -46,9 +46,12 @@ function AzureBlobStoreClient() {
     });    
   };
 
-  this.downloadFile = function() {
+  this.downloadFile = function(event) {
     console.log("Downloading file from Azure blob store...");
-    var data = { fileName = $(this) };
+    var target = event.target;
+    var blobItem = $(target).closest(".blobItem");
+    var blobName = $(blobItem).find(".name").text();
+    var data = { blobName : blobName };
     $.ajax({
       type: "POST",
       url: "download-file",
@@ -57,6 +60,23 @@ function AzureBlobStoreClient() {
         var contentType = xhr.getResponseHeader("Content-Type");
         var authorization = xhr.getResponseHeader("Authorization");
         document.cookie = "Authorization=" + authorization + ";" 
+
+        var a = document.createElement('a');
+        a.href = window.URL.createObjectURL(response);
+        // Give filename you wish to download
+        // Just make a pseudo link <a> instead of all this
+        a.download = "test-file.txt";
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        /*response.blob().then(blob => {
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          console.log(url);
+          link.href = url;
+          link.download = '111.txt';
+          link.click();
+        });        */
         /*$("#blobList").empty();
         for(var blobListIndex in response.blobList) {
           var blobItem = response.blobList[blobListIndex];

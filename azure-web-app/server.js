@@ -13,16 +13,23 @@ var fileUploadInProgress = false;
 var validToken = "";
 var azBlobStoreFacade = new AZBlobStoreFacade();
 var htmlFacade = new HTMLFacade();
+var fileFacade = new FileFacade();
+
+function FileFacade() {
+  var _this = this;
+
+  this.createFolder = async function(folder) {    
+    if (!fs.existsSync(folder)){
+        fs.mkdirSync(folder);
+    }
+  }
+}
 
 function AZBlobStoreFacade() {
   var _this = this;
   var AZURE_STORAGE_CONNECTION_STRING;
 
-  this.downloadBlobAsync = async function() {
-
-  };
-
-  this.beginFileUpload = async function (request, response, callback) {
+  this.beginFileUploadAsync = async function (request, response, callback) {
     fileUploadInProgress = true;
 
     var form = new formidable.IncomingForm();
@@ -36,6 +43,19 @@ function AZBlobStoreFacade() {
       if(callback) callback(response, file.path);
     });
   };
+
+  this.beginDownloadAsync = async function (request, response, callback) {
+    fileUploadInProgress = true;
+
+    var form = new formidable.IncomingForm();
+    form.maxFileSize = 8*1024*1024*1024;
+    form.parse(request, async function(err, fields, files) {
+      console.log("parsing form...");
+      var blobName = fields.blobName;
+      var blobInfo = await _this.downloadBlobAsync(blobName);
+      if(callback) callback(blobInfo);
+    });
+  };  
 
   this.uploadBlobAsync = async function (localFilePath, originalFileName) {    
     // Create the BlobServiceClient object which will be used to create a container client
@@ -62,14 +82,17 @@ function AZBlobStoreFacade() {
     fileUploadInProgress = false;
   };
 
-  this.downloadBlobAsync = async function (localFilePath, blobName) {    
+  this.downloadBlobAsync = async function (blobName) {    
     const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
     var containerName = "backup";
     var containerClient = blobServiceClient.getContainerClient(containerName);
     var blockBlobClient = containerClient.getBlockBlobClient(blobName);
     console.log('Downloading blob from Azure storage with name: ', blobName);
-    var uploadBlobResponse = await blockBlobClient.download(localFilePath);
-    console.log("Blob " + blobName + "was downloaded successfully.", uploadBlobResponse.requestId);
+    var localFilePath = "./tmp/" + uuidv1();
+    await fileFacade.createFolder("./tmp");
+    var response = await blockBlobClient.downloadToFile(localFilePath,0);
+    console.log("Blob " + blobName + "was downloaded successfully to local file path " + localFilePath + ".");
+    return { blobName: blobName, localFilePath: localFilePath };    
   };  
 
   this.getBlobListAsync = async function() {    
@@ -141,6 +164,24 @@ function HTMLFacade() {
     parsedHtml = _this.setHtmlValue(parsedHtml, "{cpuLog}", cpuLog);
     parsedHtml = _this.setHtmlValue(parsedHtml, "{url}", url);*/
     return parsedHtml;
+  };
+
+  this.writeFile = function(response, fileName, filePath, bearerToken) {
+    if(bearerToken)
+      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+fileName, "Authorization": bearerToken });
+    else
+      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+fileName });
+
+    fs.readFile(filePath, null, function (error, file) {
+      if (error) {
+        response.writeHead(404);
+        response.write('file not found');
+      } 
+      else {
+        response.write(file);
+      }
+      response.end();      
+    });
   };
   
   this.writeCss = function(response, cssPath) {
@@ -217,7 +258,7 @@ function HTMLFacade() {
 
 function uploadComplete(response, localFilePath) {
   //htmlFacade.writeHtmlPage(response, './static/html/index.html');
-  writeJson(response, 200, { "message" : "Upload completed." }, "Bearer " + validToken);
+  htmlFacade.writeJson(response, 200, { "message" : "Upload completed." }, "Bearer " + validToken);
 }
 
 function login(response, payload) {
@@ -226,11 +267,11 @@ function login(response, payload) {
   if(payload.password == passwords.toString()) {
       console.log("password accepted.");
       validToken = uuidv1();
-      writeJson(response, 200, { "Message" : "Login successful" }, "Bearer " + validToken);
+      htmlFacade.writeJson(response, 200, { "Message" : "Login successful" }, "Bearer " + validToken);
       return;
   }
   console.log("login failed.");
-  writeJson(response, 401, { "Message": "Invalid login or password" });
+  htmlFacade.writeJson(response, 401, { "Message": "Invalid login or password" });
 }
 
 async function processRequest(request, response) {
@@ -243,9 +284,9 @@ async function processRequest(request, response) {
   var model = {};
 
   if(request.url.startsWith("/css/")) htmlFacade.writeCss(response, request.url);
-  else if(request.url.startsWith("/js/")) writeJs(response, request.url);
+  else if(request.url.startsWith("/js/")) htmlFacade.writeJs(response, request.url);
   else if(request.url.startsWith("/login")) {
-    getRequestData(request, response, login);      
+    htmlFacade.getRequestData(request, response, login);      
   }
   else {
     // ***** Authorized section ******
@@ -266,12 +307,16 @@ async function processRequest(request, response) {
       
       // AUTHORIZATION SUCCESSFUL: Process the wanted URL    
       if(request.url.startsWith("/upload"))
-        await azBlobStoreFacade.beginFileUpload(request, response, uploadComplete);
-      else if(request.url.startsWith("/download-file"))
-        await azBlobStoreFacade.beginDownload(request, response, uploadComplete);        
+        await azBlobStoreFacade.beginFileUploadAsync(request, response, uploadComplete);
+      else if(request.url.startsWith("/download-file")) {
+        await azBlobStoreFacade.beginDownloadAsync(request, response, function(blobInfo) {
+          htmlFacade.writeFile(response, blobInfo.blobName, blobInfo.localFilePath, "Bearer " + validToken);
+        });
+        //htmlFacade.writeHtmlPage(response, './static/html/index.html');
+      }
       else if(request.url.startsWith("/list-files")) {
         var blobList = await azBlobStoreFacade.getBlobListAsync();
-        writeJson(response, 200, { "message" : "Here is the blob list...", "blobList": blobList }, "Bearer " + validToken);
+        htmlFacade.writeJson(response, 200, { "message" : "Here is the blob list...", "blobList": blobList }, "Bearer " + validToken);
       }
       else if(request.url.startsWith("/index")) htmlFacade.writeHtmlPage(response, './static/html/index.html');
       else htmlFacade.writeHtmlPage(response, './static/html/index.html');
