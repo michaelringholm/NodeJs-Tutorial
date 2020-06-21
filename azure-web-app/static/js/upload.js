@@ -33,9 +33,10 @@ function AzureBlobStoreClient() {
           $(newBlobItem).find(".name").html(blobItem.name);
           $(newBlobItem).find(".createdDate").html(blobItem.properties.createdOn);
           $(newBlobItem).find(".contentLength").html(blobItem.properties.contentLength);
+          $(newBlobItem).find(".blobDownloadLink").attr("href", "download-file/" + blobItem.name);          
           $("#blobList").append(newBlobItem);
         }
-        $(".blobItem").click(_this.downloadFile);
+        //$(".blobItem").click(_this.downloadFile);
         console.log("Done listing files in Azure blob store.");
       },
       error: function(xhr, status, reason) {
@@ -61,14 +62,14 @@ function AzureBlobStoreClient() {
         var authorization = xhr.getResponseHeader("Authorization");
         document.cookie = "Authorization=" + authorization + ";" 
 
-        var a = document.createElement('a');
-        a.href = window.URL.createObjectURL(response);
+        //var a = document.createElement('a');
+        //a.href = window.URL.createObjectURL(response);
         // Give filename you wish to download
         // Just make a pseudo link <a> instead of all this
-        a.download = "test-file.txt";
+        /*a.download = "test-file.txt";
         a.style.display = 'none';
         document.body.appendChild(a);
-        a.click();
+        a.click();*/
         /*response.blob().then(blob => {
           const link = document.createElement('a');
           const url = URL.createObjectURL(blob);

@@ -48,7 +48,7 @@ function FileFacade() {
   }
 
   this.readFileChunks = function(filePath) {
-    var CHUNK_SIZE = 10 * 1024 * 1024, // 10MB
+    var CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
     var buffer = Buffer.alloc(CHUNK_SIZE);
 
     fs.open(filePath, 'r', function(err, fd) {
@@ -150,14 +150,16 @@ function AZBlobStoreFacade() {
     return { blobName: blobName, localFilePath: localFilePath };    
   }; 
 
-  this.downloadBlobChunksAsync = async function (blobName) {    
+  this.streamBlobAsync = async function(blobName, outputStream, onEndCallback) {    
     const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
     var containerName = "backup";
     var containerClient = blobServiceClient.getContainerClient(containerName);
     var blockBlobClient = containerClient.getBlockBlobClient(blobName);
-    console.log('Downloading blob in chunks from Azure storage with name: ', blobName);
-    var response = await blockBlobClient.download(localFilePath, 1024,);
-    return { blobName: blobName, localFilePath: localFilePath };    
+    console.log('Streaming blob to output stream, blob is: ', blobName);
+    
+    var stream = await blockBlobClient.download();
+    stream.readableStreamBody.pipe(outputStream);
+    if(onEndCallback) stream.readableStreamBody.on("end", onEndCallback);
   };  
 
   this.getBlobListAsync = async function() {    
@@ -321,90 +323,26 @@ function HTMLFacade() {
 
 }
 
-function uploadComplete(response, localFilePath) {
-  //htmlFacade.writeHtmlPage(response, './static/html/index.html');
-  htmlFacade.writeJson(response, 200, { "message" : "Upload completed." }, "Bearer " + validToken);
-}
-
-function login(response, payload) {
-  console.log("trying to log in...");
-  var passwords = fs.readFileSync("local/passwords");
-  if(payload.password == passwords.toString()) {
-      console.log("password accepted.");
-      validToken = uuidv1();
-      htmlFacade.writeJson(response, 200, { "Message" : "Login successful" }, "Bearer " + validToken);
-      return;
-  }
-  console.log("login failed.");
-  htmlFacade.writeJson(response, 401, { "Message": "Invalid login or password" });
-}
 
 async function processRequest(request, response) {
-  console.log("function triggered by URL " + request.url);
-  var authenticatorKey = authenticator.generateKey();
-  var qrCodeUri = authenticator.generateTotpUri(authenticatorKey, "iHedge Blob Uploader", "iHedge", "SHA1", 6, 30);
-  QRCode.toDataURL(qrCodeUri, function (error, image) { 
-    //console.log(image);
+  //var filePath = "github - Copy - Copy.rar";
+  var filePath = "server.zip";
+  response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+filePath });
+  azBlobStoreFacade.streamBlobAsync(filePath, response, function() {
+    response.end();
   });
-  var model = {};
-
-  if(request.url.startsWith("/css/")) htmlFacade.writeCss(response, request.url);
-  else if(request.url.startsWith("/js/")) htmlFacade.writeJs(response, request.url);
-  else if(request.url.startsWith("/login")) {
-    htmlFacade.getRequestData(request, response, login);      
-  }
-  else {
-    // ***** Authorized section ******
-    var token = request.headers.authorization;
-    if(token == undefined)
-      token = htmlFacade.getCookieValue(request.headers.cookie, "Authorization");
-    if(token == undefined) {
-      console.log("No token found in headers!");
-      htmlFacade.writeHtmlPage(response, './static/html/login.html', model);
-      return;
-    }
-    else {
-      if(token != validToken) {
-        console.log("Token invalid or expired!");
-        htmlFacade.writeHtmlPage(response, './static/html/login.html', model);
-        return;
-      }
-      
-      // AUTHORIZATION SUCCESSFUL: Process the wanted URL    
-      if(request.url.startsWith("/upload"))
-        await azBlobStoreFacade.beginFileUploadAsync(request, response, uploadComplete);
-      else if(request.url.startsWith("/download-file")) {
-        await azBlobStoreFacade.beginDownloadAsync(request, response, function(blobInfo) {
-          htmlFacade.writeFile(response, blobInfo.blobName, blobInfo.localFilePath, "Bearer " + validToken);
-        });
-        //htmlFacade.writeHtmlPage(response, './static/html/index.html');
-      }
-      else if(request.url.startsWith("/list-files")) {
-        var blobList = await azBlobStoreFacade.getBlobListAsync();
-        htmlFacade.writeJson(response, 200, { "message" : "Here is the blob list...", "blobList": blobList }, "Bearer " + validToken);
-      }
-      else if(request.url.startsWith("/index")) htmlFacade.writeHtmlPage(response, './static/html/index.html');
-      else htmlFacade.writeHtmlPage(response, './static/html/index.html');
-    }
-  }
 };
-  
-  /*res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.write("<form method=\"post\" action=\"/upload\" enctype=\"multipart/form-data\">");
-  res.write("<input type=\"file\" id=\"fileToUpload\"></input>");
-  res.write("<input type=\"submit\" value=\"Upload\"></input>");
-  res.write("</form>");
-  res.end('iHedge Blob Uploader');*/
 
-var server = http.createServer(processRequest);
-server.timeout = 600*1000;
-server.listen(port);
+async function run() {
+  console.log("run() called");
+  //fileFacade.readStream();
+ 
 
-/*app.get('/', function(request, response){
-    response.sendFile(process.cwd()+'/static/index.html');
-});
+  var server = http.createServer(processRequest);
+  server.timeout = 600*1000;
+  server.listen(port);  
+}
 
-app.listen(port);*/
-
-console.log('Your application is listening on port ' + port);
-console.log('http://localhost:' + port);
+console.log("Sandbox started");
+run();
+console.log("Sandbox ended");

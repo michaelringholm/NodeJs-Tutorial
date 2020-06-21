@@ -4,7 +4,7 @@ $(function() {
 });
 
 function login() {
-  var data = { password : $("#password").val() };
+  var data = { password : $("#password").val(), login : $("#login").val(), mfaCode : $("#mfaCode").val() };
   $.ajax({
     type: "POST",
     url: "login",
