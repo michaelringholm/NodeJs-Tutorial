@@ -48,7 +48,7 @@ function FileFacade() {
   }
 
   this.readFileChunks = function(filePath) {
-    var CHUNK_SIZE = 10 * 1024 * 1024, // 10MB
+    var CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
     var buffer = Buffer.alloc(CHUNK_SIZE);
 
     fs.open(filePath, 'r', function(err, fd) {
@@ -110,7 +110,19 @@ function AZBlobStoreFacade() {
     var blobName = decodedUrl.substring(urlStartIndex + routePrefix.length);
     var blobInfo = await _this.downloadBlobAsync(blobName);
     if(callback) callback(blobInfo);
-  };  
+  };
+
+  this.streamBlobAsync = async function(blobName, outputStream, onEndCallback) {    
+    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+    var containerName = "backup";
+    var containerClient = blobServiceClient.getContainerClient(containerName);
+    var blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    console.log('Streaming blob to output stream, blob is: ', blobName);
+    
+    var stream = await blockBlobClient.download();
+    stream.readableStreamBody.pipe(outputStream);
+    if(onEndCallback) stream.readableStreamBody.on("end", onEndCallback);
+  };   
 
   this.uploadBlobAsync = async function (localFilePath, originalFileName) {    
     // Create the BlobServiceClient object which will be used to create a container client
@@ -231,21 +243,14 @@ function HTMLFacade() {
     return parsedHtml;
   };
 
-  this.writeFile = function(response, fileName, filePath, bearerToken) {
+  this.writeStream = function(response, blobName, bearerToken) {
     if(bearerToken)
-      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+fileName, "Authorization": bearerToken });
+      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+blobName, "Authorization": bearerToken });
     else
-      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+fileName });
+      response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename='+blobName });
 
-    fs.readFile(filePath, null, function (error, file) {
-      if (error) {
-        response.writeHead(404);
-        response.write('file not found');
-      } 
-      else {
-        response.write(file);
-      }
-      response.end();      
+    azBlobStoreFacade.streamBlobAsync(blobName, response, function() {
+      response.end();
     });
   };
   
@@ -317,7 +322,14 @@ function HTMLFacade() {
           if(callback) callback(response, payload);
       });
     }
-  };  
+  };
+
+  this.getPathValue = async function(urlPath, routePrefix) {
+    var decodedUrl = decodeURI(urlPath);
+    var urlStartIndex = decodedUrl.indexOf(routePrefix)
+    var blobName = decodedUrl.substring(urlStartIndex + routePrefix.length);
+    return blobName;
+  };
 
 }
 
@@ -329,7 +341,11 @@ function uploadComplete(response, localFilePath) {
 function login(response, payload) {
   console.log("trying to log in...");
   var passwords = fs.readFileSync("local/passwords");
-  if(payload.password == passwords.toString()) {
+  var usersData = fs.readFileSync("local/users", { encoding: "utf8" });
+  var userList = usersData.toString().split("\n");
+  var userArray = new Array();
+  userList.forEach(function(value, index) {userArray.push(value.trim()); });
+  if(payload.password == passwords.toString() && payload.login && userArray.includes(payload.login.trim())) {
       console.log("password accepted.");
       validToken = uuidv1();
       htmlFacade.writeJson(response, 200, { "Message" : "Login successful" }, "Bearer " + validToken);
@@ -374,9 +390,10 @@ async function processRequest(request, response) {
       if(request.url.startsWith("/upload"))
         await azBlobStoreFacade.beginFileUploadAsync(request, response, uploadComplete);
       else if(request.url.startsWith("/download-file")) {
-        await azBlobStoreFacade.beginDownloadAsync(request, response, function(blobInfo) {
-          htmlFacade.writeFile(response, blobInfo.blobName, blobInfo.localFilePath, "Bearer " + validToken);
-        });
+          //await azBlobStoreFacade.beginDownloadAsync(request, response, function(blobInfo) {
+          var blobName = await htmlFacade.getPathValue(request.url, "download-file/");
+          htmlFacade.writeStream(response, blobName, "Bearer " + validToken);
+        //});
         //htmlFacade.writeHtmlPage(response, './static/html/index.html');
       }
       else if(request.url.startsWith("/list-files")) {
